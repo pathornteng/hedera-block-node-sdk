@@ -1,8 +1,14 @@
 # @ohmpathorn/block-node-client
 
+[![npm version](https://img.shields.io/npm/v/@ohmpathorn/block-node-client)](https://www.npmjs.com/package/@ohmpathorn/block-node-client)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D16-brightgreen)](https://nodejs.org)
+
 JavaScript/TypeScript SDK for the [Hedera Block Node](https://github.com/hiero-ledger/hiero-block-node) gRPC API.
 
-Wraps all four Block Node RPCs with a clean async/callback interface, full TypeScript types, and built-in protobuf decoding so you never have to touch raw bytes.
+Wraps all four Block Node RPCs with a clean async/callback interface, full TypeScript types, and built-in protobuf decoding — so you never have to touch raw bytes.
+
+---
 
 ## Install
 
@@ -19,11 +25,11 @@ const client = new BlockNodeClient({
   endpoint: "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840",
 });
 
-// 1. Check node health
+// Check node health
 const status = await client.serverStatus();
 console.log("Latest block:", status.lastAvailableBlock);
 
-// 2. Subscribe to live blocks
+// Subscribe to live blocks
 const handle = client.subscribeBlockStream(
   { startBlockNumber: status.lastAvailableBlock - 10n },
   {
@@ -38,9 +44,11 @@ const handle = client.subscribeBlockStream(
 setTimeout(() => handle.cancel(), 60_000);
 ```
 
+---
+
 ## Testnet endpoints
 
-All endpoints use port **40840** (TLS or plaintext).
+All endpoints use port **40840**.
 
 | Region | Endpoint |
 |--------|----------|
@@ -49,35 +57,43 @@ All endpoints use port **40840** (TLS or plaintext).
 | Chicago | `s01.test.blk.chi.lat.ope.eng.hashgraph.io:40840` |
 | Tier 2 | `lfh01.testnet.blocknode.hashgraph-devops.com:40840` |
 
+---
+
 ## API reference
 
 ### `new BlockNodeClient(options)`
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `endpoint` | `string` | required | `host:port` |
-| `tls` | `"tls" \| "insecure"` | `"tls"` | TLS mode |
-| `timeout` | `number` | `10000` | Unary call timeout (ms) |
+| `endpoint` | `string` | required | `host:port` of the block node |
+| `tls` | `"tls" \| "insecure"` | `"tls"` | TLS or plaintext |
+| `timeout` | `number` | `10000` | Unary call timeout in ms |
 
 ---
 
 ### `client.serverStatus()` → `Promise<ServerStatusResponse>`
 
-Lightweight health check. **Always call this first** to validate the available block range before subscribing.
+Lightweight health check. Returns the available block range and node state. Always call this first to validate the range before subscribing.
 
 ```ts
 const status = await client.serverStatus();
-// { firstAvailableBlock, lastAvailableBlock, nextExpectedBlock, onlyLatestState }
+console.log(status.firstAvailableBlock); // bigint
+console.log(status.lastAvailableBlock);  // bigint
+console.log(status.onlyLatestState);     // boolean
 ```
 
 ---
 
 ### `client.serverStatusDetail()` → `Promise<ServerStatusDetailResponse>`
 
-Full capability report: software versions, all available block ranges, and the current network address book.
+Full capability report: software versions, all available block ranges, and the network address book.
 
 ```ts
 const detail = await client.serverStatusDetail();
+
+const v = detail.versionInformation?.blockNodeVersion;
+console.log(`Block node: ${v?.major}.${v?.minor}.${v?.patch}`);
+
 detail.availableRanges.forEach(r =>
   console.log(`${r.rangeStart} → ${r.rangeEnd}`)
 );
@@ -87,7 +103,7 @@ detail.availableRanges.forEach(r =>
 
 ### `client.getBlock(request)` → `Promise<GetBlockResponse>`
 
-Fetch a single block by number or retrieve the latest block.
+Fetch a single block by number or the latest block.
 
 ```ts
 // By number
@@ -96,42 +112,39 @@ const result = await client.getBlock({ blockNumber: 38764703n });
 // Latest
 const latest = await client.getBlock({ retrieveLatest: true });
 
-console.log(result.statusName);   // "SUCCESS"
+console.log(result.statusName);    // "SUCCESS"
 console.log(result.block?.length); // number of BlockItems
 ```
-
-**BlockItem kinds:** `block_header`, `event_header`, `round_header`, `event_transaction`, `transaction_result`, `state_changes`, `filtered_item_hash`, `block_proof`, `record_file`
 
 ---
 
 ### `client.subscribeBlockStream(options, callbacks)` → `StreamHandle`
 
-Server-streaming RPC. Accumulates `BlockItemSet` batches until `end_of_block` fires, then calls `onBlock` with the complete decoded block.
+Server-streaming RPC. Buffers `BlockItemSet` messages and fires `onBlock` once per complete block (after `end_of_block` is received).
 
 ```ts
 const handle = client.subscribeBlockStream(
   {
     startBlockNumber: 38764000n,
-    endBlockNumber: 0,            // 0 = live open-ended stream (default)
+    endBlockNumber: 0n,   // 0 = live open-ended stream
   },
   {
-    onStatus: (code, name) => { /* 1 = SUCCESS */ },
+    onStatus: (code, name) => console.log("Stream status:", name),
     onBlock:  (blockNumber, items) => {
-      const txs = items.filter(i => i.kind === "event_transaction");
-      txs.forEach(tx => {
-        console.log(tx.payload.type);                    // "CRYPTO_TRANSFER"
-        console.log(tx.payload.transactionId?.toString()); // "0.0.3569@1753912345.123456789"
+      items.filter(i => i.kind === "event_transaction").forEach(item => {
+        console.log(item.payload.type);                     // "CRYPTO_TRANSFER"
+        console.log(item.payload.transactionId?.toString()); // "0.0.3569@..."
       });
     },
     onError: (err) => console.error(err.message),
-    onEnd:   ()    => console.log("done"),
+    onEnd:   ()    => console.log("Stream ended"),
   },
 );
 
-handle.cancel(); // stop the stream at any time
+handle.cancel(); // stop at any time
 ```
 
-**⚠ Important:** Do not pass `endBlockNumber: 0` meaning "end now" — `0` is automatically converted to `uint64_max` for live streaming. Pass an explicit block number to get a bounded historical range.
+> **Note:** `endBlockNumber: 0` is automatically converted to `uint64_max` for a live stream. Pass an explicit number for a bounded historical range.
 
 ---
 
@@ -141,87 +154,141 @@ Releases gRPC connections and cleans up temp files. Always call when done.
 
 ---
 
-## Working with decoded blocks
+## Block items
 
-Every `BlockItem` has:
-- `item.kind` — which oneof field was set (`"block_header"`, `"event_transaction"`, etc.)
-- `item.payload` — the decoded message (typed per kind)
-- `item.raw` — the original bytes
+Each block is an ordered list of `BlockItem` objects. Every item has:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `kind` | `BlockItemKind` | Which oneof field is set |
+| `payload` | typed per `kind` | Decoded message |
+| `raw` | `Buffer` | Original bytes |
+
+### Item kinds
+
+| Kind | Description | Payload type |
+|------|-------------|--------------|
+| `block_header` | Block number, hash algorithm, SW versions | `BlockHeader` |
+| `event_header` | Gossip event metadata | `EventHeader` |
+| `round_header` | Consensus round number | `RoundHeader` |
+| `event_transaction` | Transaction type, ID, memo, raw bytes | `EventTransaction` |
+| `transaction_result` | Status, fee, payer, transfers, tx hash | `TransactionResult` |
+| `state_changes` | Which state tables changed | `StateChanges` |
+| `filtered_item_hash` | Hash placeholder for filtered items | `FilteredItemHash` |
+| `block_proof` | TSS block signature + Merkle proof | `BlockProof` |
+| `record_file` | Historical block (pre-HIP-1056) with embedded transactions | `RecordFile` |
+| `address_book_proof` | Network address book hashes for record-file blocks | `AddressBookProof` |
+
+### Example: switch on kind
 
 ```ts
 items.forEach(item => {
   switch (item.kind) {
     case "block_header":
-      console.log("Block number:", item.payload.number);
+      console.log("Block #", item.payload.number);
       break;
+
     case "event_transaction":
-      console.log("Tx type:", item.payload.type);
-      console.log("Tx ID:  ", item.payload.transactionId?.toString());
+      console.log(item.payload.type);                      // "CRYPTO_TRANSFER"
+      console.log(item.payload.transactionId?.toString()); // "0.0.3@1753912345.000000001"
+      console.log(item.payload.memo);
       break;
+
     case "transaction_result":
-      console.log("Status:", item.payload.statusName);
-      console.log("Fee:   ", item.payload.transactionFee, "tinybars");
+      console.log(item.payload.statusName);      // "SUCCESS"
+      console.log(item.payload.transactionFee);  // bigint tinybars
       item.payload.transfers.forEach(t =>
-        console.log(`  ${t.accountId?.accountNum} → ${t.amount}`));
+        console.log(`  ${t.accountId?.accountNum}: ${t.amount}`)
+      );
       break;
+
     case "record_file":
-      // Historical block (pre-HIP-1056) — transactions nested inside
+      // Historical block format — transactions are nested inside
       item.payload.transactions.forEach(tx =>
-        console.log(tx.type, tx.transactionId?.toString()));
+        console.log(tx.type, tx.transactionId?.toString())
+      );
       break;
   }
 });
 ```
 
-## TransactionID format
+---
 
-Hedera transaction IDs are formatted as `shard.realm.account@seconds.nanos`:
+## Transaction IDs
+
+Hedera transaction IDs follow the format `shard.realm.account@seconds.nanos`:
 
 ```ts
 const txId = item.payload.transactionId;
-console.log(txId.toString()); // "0.0.3569@1753912345.123456789"
-console.log(txId.accountId);  // { shardNum: 0n, realmNum: 0n, accountNum: 3569n }
-console.log(txId.transactionValidStart.toDate()); // JavaScript Date
+console.log(txId.toString());
+// "0.0.3569@1753912345.123456789"
+
+console.log(txId.accountId);
+// { shardNum: 0n, realmNum: 0n, accountNum: 3569n }
+
+console.log(txId.transactionValidStart.toDate());
+// JavaScript Date
 ```
+
+---
 
 ## Transaction types
 
-All 55 Hedera transaction types are decoded:
+All 55 Hedera transaction types are decoded automatically. You can also import the lookup table directly:
 
 ```ts
 import { TX_TYPES } from "@ohmpathorn/block-node-client";
-// { 7: "CONTRACT_CALL", 14: "CRYPTO_TRANSFER", 27: "CONSENSUS_SUBMIT_MESSAGE", ... }
+
+TX_TYPES[14]  // "CRYPTO_TRANSFER"
+TX_TYPES[27]  // "CONSENSUS_SUBMIT_MESSAGE"
+TX_TYPES[50]  // "ETHEREUM_TRANSACTION"
 ```
+
+---
 
 ## Status codes
 
 ```ts
 import { SubscribeStreamCode, BlockResponseCode } from "@ohmpathorn/block-node-client";
 
-SubscribeStreamCode.SUCCESS                    // 1
-SubscribeStreamCode.INVALID_END_BLOCK_NUMBER   // 5 — caused by sending end_block = 0
-SubscribeStreamCode.NOT_AVAILABLE              // 6 — block not on this node
+// Stream subscription status (first message)
+SubscribeStreamCode.SUCCESS                   // 1
+SubscribeStreamCode.INVALID_START_BLOCK_NUMBER // 4
+SubscribeStreamCode.INVALID_END_BLOCK_NUMBER  // 5 — caused by sending end_block = 0
+SubscribeStreamCode.NOT_AVAILABLE             // 6 — block not on this node
 
-BlockResponseCode.NOT_FOUND                    // 4
-BlockResponseCode.NOT_AVAILABLE                // 5
+// getBlock response status
+BlockResponseCode.SUCCESS       // 1
+BlockResponseCode.NOT_FOUND     // 4
+BlockResponseCode.NOT_AVAILABLE // 5
 ```
+
+---
 
 ## TypeScript
 
-Full types are included. Import them directly:
+Full types ship with the package. Import what you need:
 
 ```ts
 import {
   BlockNodeClient,
   BlockNodeClientOptions,
   ServerStatusResponse,
+  ServerStatusDetailResponse,
   BlockItem,
+  BlockItemKind,
+  BlockHeader,
   EventTransaction,
   TransactionResult,
   RecordFile,
+  AddressBookProof,
   StreamHandle,
+  SubscribeStreamCode,
+  BlockResponseCode,
 } from "@ohmpathorn/block-node-client";
 ```
+
+---
 
 ## Examples
 
@@ -235,14 +302,21 @@ node examples/transaction-monitor.js
 # Multi-endpoint failover
 node examples/multi-endpoint.js
 
-# Use plaintext instead of TLS
+# Plaintext instead of TLS
 USE_INSECURE=1 node examples/basic.js
 
-# Use a different endpoint
+# Different endpoint
 ENDPOINT=s01.test.blk.sgp.lat.ope.eng.hashgraph.io:40840 node examples/basic.js
 ```
 
+---
+
+## How it works
+
+The SDK writes the necessary protobuf definitions to a temp directory at startup and loads them via `@grpc/proto-loader`. Inner `BlockItem` payloads are decoded manually using a hand-rolled `ProtoReader` rather than generated stubs — this makes the SDK resilient to schema evolution and unknown fields.
+
+---
+
 ## License
 
-Apache 2.0
-# hedera-block-node-sdk
+[Apache 2.0](LICENSE)
