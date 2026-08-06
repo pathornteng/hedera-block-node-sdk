@@ -148,6 +148,55 @@ handle.cancel(); // stop at any time
 
 ---
 
+### `client.getBlockTransactions(request)` → `Promise<FullTransaction[]>`
+
+Fetch all transactions in a block, fully decoded — body fields, all signatures, receipt, HBAR/token/NFT transfers, and assessed custom fees.
+
+```ts
+const txs = await client.getBlockTransactions({ blockNumber: 38764703n });
+// or: await client.getBlockTransactions({ retrieveLatest: true });
+
+txs.forEach(tx => {
+  console.log(tx.type, tx.transactionId?.toString());
+
+  // Signatures (all keys that signed)
+  tx.signatures.forEach(s => {
+    console.log(s.type);        // "ed25519" | "ecdsa_secp256k1" | "rsa_3072"
+    console.log(s.pubKeyPrefix); // hex string
+    console.log(s.signature);    // hex string
+  });
+
+  // Receipt
+  console.log(tx.receipt?.statusName);       // "SUCCESS"
+  console.log(tx.receipt?.accountId);        // created account (CryptoCreate)
+  console.log(tx.receipt?.exchangeRate?.currentRate);
+
+  // Record
+  console.log(tx.consensusTimestamp?.toDate());
+  console.log(tx.transactionFee);            // bigint tinybars
+
+  // HBAR transfers
+  tx.transfers.forEach(t =>
+    console.log(`${t.accountId?.accountNum}: ${t.amount}`)
+  );
+
+  // Token transfers
+  tx.tokenTransfers.forEach(ttl => {
+    console.log("token:", ttl.tokenId);
+    ttl.transfers.forEach(t => console.log(t.accountId?.accountNum, t.amount));
+    ttl.nftTransfers.forEach(n => console.log(`NFT #${n.serialNumber}`));
+  });
+
+  // Raw bytes
+  console.log(tx.rawTransaction.length, "bytes");
+  console.log(tx.rawRecord?.length, "bytes"); // record_file blocks only
+});
+```
+
+> **Note:** For **historical blocks** (`record_file` format, blocks before HIP-1056) all fields are populated from the embedded `RecordStreamFile`. For **native stream blocks** (newer), the receipt, token transfers, and assessed custom fees are not available — only body and signature fields.
+
+---
+
 ### `client.close()`
 
 Releases gRPC connections and cleans up temp files. Always call when done.
@@ -285,6 +334,15 @@ import {
   StreamHandle,
   SubscribeStreamCode,
   BlockResponseCode,
+  // getBlockTransactions types
+  FullTransaction,
+  Signature,
+  TransactionReceipt,
+  TokenTransferList,
+  NftTransfer,
+  AssessedCustomFee,
+  EntityId,
+  TokenId,
 } from "@ohmpathorn/block-node-client";
 ```
 
@@ -295,6 +353,12 @@ import {
 ```bash
 # Basic usage — all four APIs
 node examples/basic.js
+
+# Fully decoded transactions with signatures, receipt, and transfers
+node examples/get-block-transactions.js
+
+# Fetch a specific block
+BLOCK=38764703 node examples/get-block-transactions.js
 
 # Live transaction monitor
 node examples/transaction-monitor.js

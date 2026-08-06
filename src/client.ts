@@ -1,6 +1,6 @@
 import * as grpc from "@grpc/grpc-js";
 import { ProtoManager } from "./proto-manager";
-import { decodeBlockItem } from "./decoder";
+import { decodeBlockItem, decodeFullTransactionsFromBlockItem } from "./decoder";
 import {
   BlockNodeClientOptions,
   ServerStatusResponse,
@@ -16,6 +16,9 @@ import {
   SemanticVersion,
   BlockRange,
   BlockNodeVersions,
+  FullTransaction,
+  EventTransaction,
+  TransactionResult as TransactionResultType,
 } from "./types";
 
 const UINT64_MAX = "18446744073709551615";
@@ -178,7 +181,82 @@ export class BlockNodeClient {
     });
   }
 
-  // ── 4. subscribeBlockStream ──────────────────────────────────────────────────
+  // ── 4. getBlockTransactions ──────────────────────────────────────────────────
+
+  /**
+   * Fetch all fully-decoded transactions in a block.
+   *
+   * Each returned `FullTransaction` includes:
+   * - Transaction identity: `transactionId`, `type`, `memo`
+   * - Body fields: `nodeAccountId`, `maxTransactionFee`, `transactionValidDuration`
+   * - All signatures: `signatures[]` (pubKeyPrefix + signature hex, typed by algorithm)
+   * - Receipt: `receipt` with status, exchange rate, and any created entity IDs
+   * - Record: `consensusTimestamp`, `transactionHash`, `transactionFee`
+   * - Transfers: HBAR `transfers[]`, fungible/NFT `tokenTransfers[]`
+   * - Custom fees: `assessedCustomFees[]`
+   * - Raw bytes: `rawTransaction`, `rawRecord` (record_file blocks only)
+   *
+   * For historical blocks (record_file format) all fields are populated from
+   * the embedded RecordStreamFile. For native stream blocks (separate
+   * event_transaction / transaction_result items) the receipt, token transfers,
+   * and assessed custom fees are not available — only body and signature fields.
+   *
+   * @example
+   * ```ts
+   * const txs = await client.getBlockTransactions({ blockNumber: 38764703n });
+   * txs.forEach(tx => {
+   *   console.log(tx.type, tx.transactionId?.toString());
+   *   console.log("status:", tx.receipt?.statusName);
+   *   console.log("fee:", tx.transactionFee);
+   *   tx.signatures.forEach(s => console.log(s.type, s.pubKeyPrefix));
+   * });
+   * ```
+   */
+  async getBlockTransactions(request: BlockRequestSpecifier): Promise<FullTransaction[]> {
+    const result = await this.getBlock(request);
+    if (!result.block) return [];
+
+    const txs: FullTransaction[] = [];
+    const hasRecordFile = result.block.some(i => i.kind === "record_file");
+
+    if (hasRecordFile) {
+      // Historical block: each record_file item contains a full RecordStreamFile
+      for (const item of result.block) {
+        if (item.kind === "record_file") {
+          txs.push(...decodeFullTransactionsFromBlockItem(item.raw));
+        }
+      }
+    } else {
+      // Native stream block: pair event_transaction + transaction_result items
+      let pending: FullTransaction | null = null;
+      for (const item of result.block) {
+        if (item.kind === "event_transaction") {
+          const et = item.payload as EventTransaction;
+          if (et.kind === "application" && et.raw.length > 0) {
+            // Decode full body + signatures from the raw Transaction bytes
+            const full = decodeFullTransactionsFromBlockItem(item.raw);
+            pending = full.length > 0 ? full[0] : null;
+          }
+        } else if (item.kind === "transaction_result" && pending) {
+          const res = item.payload as TransactionResultType;
+          pending.receipt = {
+            status: res.status,
+            statusName: res.statusName,
+          };
+          if (res.consensusTimestamp) pending.consensusTimestamp = res.consensusTimestamp;
+          if (res.transactionHash?.length) pending.transactionHash = res.transactionHash;
+          if (res.transactionFee) pending.transactionFee = res.transactionFee;
+          if (res.transfers?.length) pending.transfers = res.transfers;
+          txs.push(pending);
+          pending = null;
+        }
+      }
+    }
+
+    return txs;
+  }
+
+  // ── 5. subscribeBlockStream ──────────────────────────────────────────────────
 
   /**
    * Subscribe to a live or historical block stream.

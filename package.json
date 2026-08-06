@@ -1,6 +1,6 @@
 {
   "name": "@ohmpathorn/block-node-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "JavaScript SDK for the Hedera Block Node gRPC API",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,8 +27,9 @@
     "@grpc/proto-loader": "^0.7.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "pptxgenjs": "^4.0.1",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=16.0.0"

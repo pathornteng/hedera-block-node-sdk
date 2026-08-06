@@ -242,3 +242,120 @@ export interface StreamHandle {
   /** Cancel the stream */
   cancel(): void;
 }
+
+// ── FullTransaction (getBlockTransactions) ────────────────────────────────────
+
+export interface Signature {
+  /** Leading bytes of the public key, hex-encoded */
+  pubKeyPrefix: string;
+  /** Signature algorithm */
+  type: "ed25519" | "ecdsa_secp256k1" | "rsa_3072" | "contract" | "unknown";
+  /** Signature bytes, hex-encoded */
+  signature: string;
+}
+
+export interface EntityId {
+  shardNum: bigint;
+  realmNum: bigint;
+  entityNum: bigint;
+}
+
+export interface TokenId {
+  shardNum: bigint;
+  realmNum: bigint;
+  tokenNum: bigint;
+}
+
+export interface ExchangeRate {
+  hbarEquivalent: number;
+  centEquivalent: number;
+}
+
+export interface ExchangeRateSet {
+  currentRate?: ExchangeRate;
+  nextRate?: ExchangeRate;
+}
+
+export interface TransactionReceipt {
+  status: number;
+  statusName: string;
+  accountId?: AccountId;
+  fileId?: EntityId;
+  contractId?: EntityId;
+  topicId?: EntityId;
+  tokenId?: TokenId;
+  scheduleId?: EntityId;
+  exchangeRate?: ExchangeRateSet;
+  topicSequenceNumber?: bigint;
+  topicRunningHash?: Buffer;
+  topicRunningHashVersion?: bigint;
+  serialNumbers?: bigint[];
+  nodeId?: bigint;
+}
+
+export interface TokenTransfer {
+  accountId?: AccountId;
+  amount: bigint;
+  isApproval?: boolean;
+}
+
+export interface NftTransfer {
+  senderAccountId?: AccountId;
+  receiverAccountId?: AccountId;
+  serialNumber: bigint;
+  isApproval?: boolean;
+}
+
+export interface TokenTransferList {
+  tokenId?: TokenId;
+  transfers: TokenTransfer[];
+  nftTransfers: NftTransfer[];
+}
+
+export interface AssessedCustomFee {
+  amount: bigint;
+  tokenId?: TokenId;
+  feeCollectorAccountId?: AccountId;
+  effectivePayerAccountIds: AccountId[];
+}
+
+export interface FullTransaction {
+  /** Hedera transaction ID */
+  transactionId?: TransactionId;
+  /** Transaction type string, e.g. "CRYPTO_TRANSFER" */
+  type?: string;
+  /** Optional memo */
+  memo?: string;
+  /** Node the transaction was submitted to */
+  nodeAccountId?: AccountId;
+  /** Maximum fee the payer authorised (tinybars) */
+  maxTransactionFee?: bigint;
+  /** Transaction validity window (seconds) */
+  transactionValidDuration?: bigint;
+  /** All signatures from the SignatureMap */
+  signatures: Signature[];
+  /** Receipt: final status plus any created entity IDs */
+  receipt?: TransactionReceipt;
+  /** Consensus timestamp */
+  consensusTimestamp?: Timestamp;
+  /** SHA-384 hash of the transaction bytes */
+  transactionHash?: Buffer;
+  /** Actual fee charged (tinybars) */
+  transactionFee?: bigint;
+  /** HBAR transfers */
+  transfers: Transfer[];
+  /** Fungible-token and NFT transfers */
+  tokenTransfers: TokenTransferList[];
+  /** Custom fees assessed during token operations */
+  assessedCustomFees: AssessedCustomFee[];
+  /** Auto-generated alias (CryptoCreate with alias) */
+  alias?: Buffer;
+  /** Ethereum transaction hash (EthereumTransaction) */
+  ethereumHash?: Buffer;
+  /** EVM contract address */
+  evmAddress?: Buffer;
+  /** Raw serialised Transaction proto bytes */
+  rawTransaction: Buffer;
+  /** Raw serialised TransactionRecord proto bytes (record_file blocks only) */
+  rawRecord?: Buffer;
+}

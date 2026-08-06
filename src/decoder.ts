@@ -12,6 +12,9 @@ import {
   EventTransaction, TransactionResult, StateChanges, FilteredItemHash,
   BlockProof, RecordFile, AddressBookProof, SemanticVersion, Timestamp,
   AccountId, TransactionId, Transfer, StateChange, DecodedTransaction,
+  Signature, EntityId, TokenId, ExchangeRate, ExchangeRateSet,
+  TransactionReceipt, TokenTransfer, NftTransfer, TokenTransferList,
+  AssessedCustomFee, FullTransaction,
 } from "./types";
 
 // ─── ProtoReader ──────────────────────────────────────────────────────────────
@@ -531,3 +534,343 @@ export const STATE_IDS: Record<number, string> = {
   14:"SCHEDULES_BY_ID",18:"RUNNING_HASHES",19:"BLOCKS",20:"NODES",21:"TOPICS",
   24:"BLOCK_STREAM_INFO",25:"PENDING_AIRDROPS",
 };
+
+// ─── FullTransaction decoders (getBlockTransactions) ─────────────────────────
+
+function decodeSignatureMap(buf: Buffer): Signature[] {
+  const sigs: Signature[] = [];
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 2) {
+      const sp = r.bytes();
+      const sig: Signature = { pubKeyPrefix: "", type: "unknown", signature: "" };
+      const rs = new ProtoReader(sp);
+      while (rs.more()) {
+        const t = rs.tag();
+        if (t.fieldNum === 1 && t.wireType === 2) {
+          sig.pubKeyPrefix = rs.bytes().toString("hex");
+        } else if (t.fieldNum === 2 && t.wireType === 2) {
+          sig.type = "contract"; sig.signature = rs.bytes().toString("hex");
+        } else if (t.fieldNum === 3 && t.wireType === 2) {
+          sig.type = "ed25519"; sig.signature = rs.bytes().toString("hex");
+        } else if (t.fieldNum === 4 && t.wireType === 2) {
+          sig.type = "rsa_3072"; sig.signature = rs.bytes().toString("hex");
+        } else if (t.fieldNum === 6 && t.wireType === 2) {
+          sig.type = "ecdsa_secp256k1"; sig.signature = rs.bytes().toString("hex");
+        } else {
+          rs.skip(t.wireType);
+        }
+      }
+      sigs.push(sig);
+    } else {
+      r.skip(wireType);
+    }
+  }
+  return sigs;
+}
+
+function decodeEntityId(buf: Buffer): EntityId {
+  const out: EntityId = { shardNum: 0n, realmNum: 0n, entityNum: 0n };
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 0) out.shardNum  = r.varint();
+    else if (fieldNum === 2 && wireType === 0) out.realmNum  = r.varint();
+    else if (fieldNum === 3 && wireType === 0) out.entityNum = r.varint();
+    else r.skip(wireType);
+  }
+  return out;
+}
+
+function decodeTokenId(buf: Buffer): TokenId {
+  const out: TokenId = { shardNum: 0n, realmNum: 0n, tokenNum: 0n };
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 0) out.shardNum  = r.varint();
+    else if (fieldNum === 2 && wireType === 0) out.realmNum  = r.varint();
+    else if (fieldNum === 3 && wireType === 0) out.tokenNum  = r.varint();
+    else r.skip(wireType);
+  }
+  return out;
+}
+
+function decodeExchangeRateSet(buf: Buffer): ExchangeRateSet {
+  const out: ExchangeRateSet = {};
+  const decodeRate = (b: Buffer): ExchangeRate => {
+    const rate: ExchangeRate = { hbarEquivalent: 0, centEquivalent: 0 };
+    const rr = new ProtoReader(b);
+    while (rr.more()) {
+      const t = rr.tag();
+      if (t.fieldNum === 1 && t.wireType === 0) rate.hbarEquivalent = Number(rr.varint());
+      else if (t.fieldNum === 2 && t.wireType === 0) rate.centEquivalent = Number(rr.varint());
+      else rr.skip(t.wireType);
+    }
+    return rate;
+  };
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 2) out.currentRate = decodeRate(r.bytes());
+    else if (fieldNum === 2 && wireType === 2) out.nextRate  = decodeRate(r.bytes());
+    else r.skip(wireType);
+  }
+  return out;
+}
+
+function decodeTransactionReceiptFull(buf: Buffer): TransactionReceipt {
+  const out: TransactionReceipt = { status: 0, statusName: "UNKNOWN" };
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 0) {
+      out.status = Number(r.varint());
+      out.statusName = RESPONSE_CODES[out.status] ?? `CODE_${out.status}`;
+    } else if (fieldNum === 2 && wireType === 2) out.accountId  = decodeAccountId(r.bytes());
+    else if (fieldNum === 3 && wireType === 2) out.fileId      = decodeEntityId(r.bytes());
+    else if (fieldNum === 4 && wireType === 2) out.contractId  = decodeEntityId(r.bytes());
+    else if (fieldNum === 5 && wireType === 2) out.exchangeRate = decodeExchangeRateSet(r.bytes());
+    else if (fieldNum === 6 && wireType === 2) out.topicId     = decodeEntityId(r.bytes());
+    else if (fieldNum === 7 && wireType === 0) out.topicSequenceNumber = r.varint();
+    else if (fieldNum === 8 && wireType === 2) out.topicRunningHash = r.bytes();
+    else if (fieldNum === 9 && wireType === 0) out.topicRunningHashVersion = r.varint();
+    else if (fieldNum === 10 && wireType === 2) out.tokenId    = decodeTokenId(r.bytes());
+    else if (fieldNum === 11 && wireType === 0) {
+      if (!out.serialNumbers) out.serialNumbers = [];
+      out.serialNumbers.push(toSigned64(r.varint()));
+    } else if (fieldNum === 11 && wireType === 2) {
+      // packed int64 serial numbers
+      if (!out.serialNumbers) out.serialNumbers = [];
+      const pb = r.bytes();
+      const pr = new ProtoReader(pb);
+      while (pr.more()) out.serialNumbers.push(toSigned64(pr.varint()));
+    } else if (fieldNum === 12 && wireType === 2) out.scheduleId = decodeEntityId(r.bytes());
+    else if (fieldNum === 14 && wireType === 0) out.nodeId     = r.varint();
+    else r.skip(wireType);
+  }
+  return out;
+}
+
+function decodeTokenTransferList(buf: Buffer): TokenTransferList {
+  const out: TokenTransferList = { transfers: [], nftTransfers: [] };
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 2) {
+      out.tokenId = decodeTokenId(r.bytes());
+    } else if (fieldNum === 2 && wireType === 2) {
+      const aa = r.bytes();
+      const ra = new ProtoReader(aa);
+      const t: TokenTransfer = { amount: 0n };
+      while (ra.more()) {
+        const tat = ra.tag();
+        if (tat.fieldNum === 1 && tat.wireType === 2) t.accountId = decodeAccountId(ra.bytes());
+        else if (tat.fieldNum === 2 && tat.wireType === 0) t.amount = toSigned64(ra.varint());
+        else if (tat.fieldNum === 3 && tat.wireType === 0) t.isApproval = Boolean(ra.varint());
+        else ra.skip(tat.wireType);
+      }
+      out.transfers.push(t);
+    } else if (fieldNum === 3 && wireType === 2) {
+      const nft = r.bytes();
+      const rn = new ProtoReader(nft);
+      const n: NftTransfer = { serialNumber: 0n };
+      while (rn.more()) {
+        const nt = rn.tag();
+        if (nt.fieldNum === 1 && nt.wireType === 2) n.senderAccountId   = decodeAccountId(rn.bytes());
+        else if (nt.fieldNum === 2 && nt.wireType === 2) n.receiverAccountId = decodeAccountId(rn.bytes());
+        else if (nt.fieldNum === 3 && nt.wireType === 0) n.serialNumber   = toSigned64(rn.varint());
+        else if (nt.fieldNum === 4 && nt.wireType === 0) n.isApproval     = Boolean(rn.varint());
+        else rn.skip(nt.wireType);
+      }
+      out.nftTransfers.push(n);
+    } else {
+      r.skip(wireType);
+    }
+  }
+  return out;
+}
+
+function decodeAssessedCustomFee(buf: Buffer): AssessedCustomFee {
+  const out: AssessedCustomFee = { amount: 0n, effectivePayerAccountIds: [] };
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 0) out.amount = toSigned64(r.varint());
+    else if (fieldNum === 2 && wireType === 2) out.tokenId = decodeTokenId(r.bytes());
+    else if (fieldNum === 3 && wireType === 2) out.feeCollectorAccountId = decodeAccountId(r.bytes());
+    else if (fieldNum === 4 && wireType === 2) out.effectivePayerAccountIds.push(decodeAccountId(r.bytes()));
+    else r.skip(wireType);
+  }
+  return out;
+}
+
+// Decodes a Hedera TransactionRecord proto (from record_file RecordStreamItem.field2)
+function decodeHederaTransactionRecord(buf: Buffer, out: FullTransaction): void {
+  const r = new ProtoReader(buf);
+  while (r.more()) {
+    const { fieldNum, wireType } = r.tag();
+    if (fieldNum === 1 && wireType === 2) out.receipt = decodeTransactionReceiptFull(r.bytes());
+    else if (fieldNum === 2 && wireType === 2) out.transactionHash = r.bytes();
+    else if (fieldNum === 3 && wireType === 2) out.consensusTimestamp = decodeTimestamp(r.bytes());
+    else if (fieldNum === 4 && wireType === 2) { if (!out.transactionId) out.transactionId = decodeTransactionId(r.bytes()); else r.skip(wireType); }
+    else if (fieldNum === 5 && wireType === 2) { const m = r.bytes().toString("utf8").trim(); if (m && !out.memo) out.memo = m; }
+    else if (fieldNum === 6 && wireType === 0) out.transactionFee = r.varint();
+    else if (fieldNum === 7 && wireType === 2) out.transfers = decodeTransferList(r.bytes());
+    else if (fieldNum === 10 && wireType === 2) out.tokenTransfers.push(decodeTokenTransferList(r.bytes()));
+    else if (fieldNum === 12 && wireType === 2) out.assessedCustomFees.push(decodeAssessedCustomFee(r.bytes()));
+    else if (fieldNum === 16 && wireType === 2) out.alias = r.bytes();
+    else if (fieldNum === 17 && wireType === 2) out.ethereumHash = r.bytes();
+    else if (fieldNum === 22 && wireType === 2) out.evmAddress = r.bytes();
+    else r.skip(wireType);
+  }
+}
+
+// Decodes Transaction bytes (body + signatures) into the provided FullTransaction
+function decodeTransactionIntoFull(txBytes: Buffer, out: FullTransaction): void {
+  let signedTxBytes: Buffer | null = null;
+  let legacyBodyBytes: Buffer | null = null;
+  let legacySigMapBytes: Buffer | null = null;
+
+  const r0 = new ProtoReader(txBytes);
+  while (r0.more()) {
+    const { fieldNum, wireType } = r0.tag();
+    if (fieldNum === 5 && wireType === 2) signedTxBytes    = r0.bytes();
+    else if (fieldNum === 3 && wireType === 2) legacyBodyBytes  = r0.bytes();
+    else if (fieldNum === 2 && wireType === 2) legacySigMapBytes = r0.bytes();
+    else r0.skip(wireType);
+  }
+
+  let bodyBytes: Buffer | null = null;
+
+  if (signedTxBytes) {
+    const r1 = new ProtoReader(signedTxBytes);
+    while (r1.more()) {
+      const { fieldNum, wireType } = r1.tag();
+      if (fieldNum === 1 && wireType === 2) bodyBytes = r1.bytes();
+      else if (fieldNum === 2 && wireType === 2) out.signatures = decodeSignatureMap(r1.bytes());
+      else r1.skip(wireType);
+    }
+  } else if (legacyBodyBytes) {
+    bodyBytes = legacyBodyBytes;
+    if (legacySigMapBytes) out.signatures = decodeSignatureMap(legacySigMapBytes);
+  }
+
+  if (!bodyBytes) return;
+
+  const r2 = new ProtoReader(bodyBytes);
+  while (r2.more()) {
+    const { fieldNum, wireType } = r2.tag();
+    if (fieldNum === 1 && wireType === 2) out.transactionId = decodeTransactionId(r2.bytes());
+    else if (fieldNum === 2 && wireType === 2) out.nodeAccountId = decodeAccountId(r2.bytes());
+    else if (fieldNum === 3 && wireType === 0) out.maxTransactionFee = r2.varint();
+    else if (fieldNum === 4 && wireType === 2) {
+      const db = r2.bytes();
+      const dr = new ProtoReader(db);
+      while (dr.more()) {
+        const dt = dr.tag();
+        if (dt.fieldNum === 1 && dt.wireType === 0) out.transactionValidDuration = dr.varint();
+        else dr.skip(dt.wireType);
+      }
+    } else if (fieldNum === 6 && wireType === 2) {
+      const m = r2.bytes().toString("utf8").trim();
+      if (m) out.memo = m;
+    } else if (TX_TYPES[fieldNum]) {
+      out.type = TX_TYPES[fieldNum];
+      r2.skip(wireType);
+    } else {
+      r2.skip(wireType);
+    }
+  }
+}
+
+function extractFullTransactionsFromRecordStreamFile(buf: Buffer): FullTransaction[] {
+  const txs: FullTransaction[] = [];
+  try {
+    const r = new ProtoReader(buf);
+    while (r.more()) {
+      const { fieldNum, wireType } = r.tag();
+      if (fieldNum === 3 && wireType === 2) {
+        const itemBuf = r.bytes();
+        let txBytes: Buffer | null = null;
+        let recordBytes: Buffer | null = null;
+        const ri = new ProtoReader(itemBuf);
+        while (ri.more()) {
+          const t = ri.tag();
+          if (t.fieldNum === 1 && t.wireType === 2) txBytes     = ri.bytes();
+          else if (t.fieldNum === 2 && t.wireType === 2) recordBytes = ri.bytes();
+          else ri.skip(t.wireType);
+        }
+        if (txBytes) {
+          const full: FullTransaction = {
+            signatures: [], transfers: [], tokenTransfers: [],
+            assessedCustomFees: [], rawTransaction: txBytes,
+          };
+          if (recordBytes) full.rawRecord = recordBytes;
+          try { decodeTransactionIntoFull(txBytes, full); } catch (_) {}
+          if (recordBytes) { try { decodeHederaTransactionRecord(recordBytes, full); } catch (_) {} }
+          txs.push(full);
+        }
+      } else {
+        r.skip(wireType);
+      }
+    }
+  } catch (_) {}
+  return txs;
+}
+
+/**
+ * Decode all transactions from a raw BlockItem buffer.
+ *
+ * For record_file items (historical blocks): returns fully decoded transactions
+ * with body fields, all signatures, receipt, HBAR/token/NFT transfers, and
+ * assessed custom fees.
+ *
+ * For event_transaction items (native stream blocks): returns transactions with
+ * body fields and signatures. Pass the corresponding transaction_result item
+ * raw bytes separately if you need the record fields.
+ *
+ * Returns an empty array for non-transaction item kinds.
+ */
+export function decodeFullTransactionsFromBlockItem(raw: Buffer): FullTransaction[] {
+  try {
+    const r = new ProtoReader(raw);
+    while (r.more()) {
+      const { fieldNum, wireType } = r.tag();
+      if (fieldNum === 10 && wireType === 2) {
+        // RecordFileItem wrapper
+        const rfiBuf = r.bytes();
+        const rfi = new ProtoReader(rfiBuf);
+        while (rfi.more()) {
+          const t = rfi.tag();
+          if (t.fieldNum === 2 && t.wireType === 2) {
+            return extractFullTransactionsFromRecordStreamFile(rfi.bytes());
+          } else {
+            rfi.skip(t.wireType);
+          }
+        }
+        return [];
+      } else if (fieldNum === 4 && wireType === 2) {
+        // event_transaction: single transaction
+        const etBuf = r.bytes();
+        let txBytes: Buffer | null = null;
+        const re = new ProtoReader(etBuf);
+        while (re.more()) {
+          const t = re.tag();
+          if (t.fieldNum === 1 && t.wireType === 2) { txBytes = re.bytes(); break; }
+          else re.skip(t.wireType);
+        }
+        if (!txBytes) return [];
+        const full: FullTransaction = {
+          signatures: [], transfers: [], tokenTransfers: [],
+          assessedCustomFees: [], rawTransaction: txBytes,
+        };
+        try { decodeTransactionIntoFull(txBytes, full); } catch (_) {}
+        return [full];
+      } else {
+        r.skip(wireType);
+      }
+    }
+  } catch (_) {}
+  return [];
+}
