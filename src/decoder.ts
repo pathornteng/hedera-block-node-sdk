@@ -68,6 +68,14 @@ function toSigned64(v: bigint): bigint {
   return v >= MAX ? v - 18446744073709551616n : v;
 }
 
+// AccountAmount.amount is declared `sint64` in the HAPI protos, which uses
+// ZigZag varint encoding (unlike the plain two's-complement `int64` used for
+// fields like serial numbers or assessed fee amounts) — decoding it with
+// toSigned64 silently produced wrong, always-positive amounts.
+function zigzagDecode64(v: bigint): bigint {
+  return (v >> 1n) ^ -(v & 1n);
+}
+
 function decodeTimestamp(buf: Buffer): Timestamp {
   const out = { seconds: 0n, nanos: 0 };
   const r = new ProtoReader(buf);
@@ -358,7 +366,7 @@ function decodeTransferList(buf: Buffer): Transfer[] {
       while (ra.more()) {
         const t = ra.tag();
         if (t.fieldNum === 1 && t.wireType === 2) entry.accountId = decodeAccountId(ra.bytes());
-        else if (t.fieldNum === 2 && t.wireType === 0) entry.amount = toSigned64(ra.varint());
+        else if (t.fieldNum === 2 && t.wireType === 0) entry.amount = zigzagDecode64(ra.varint());
         else ra.skip(t.wireType);
       }
       transfers.push(entry);
@@ -666,7 +674,7 @@ function decodeTokenTransferList(buf: Buffer): TokenTransferList {
       while (ra.more()) {
         const tat = ra.tag();
         if (tat.fieldNum === 1 && tat.wireType === 2) t.accountId = decodeAccountId(ra.bytes());
-        else if (tat.fieldNum === 2 && tat.wireType === 0) t.amount = toSigned64(ra.varint());
+        else if (tat.fieldNum === 2 && tat.wireType === 0) t.amount = zigzagDecode64(ra.varint());
         else if (tat.fieldNum === 3 && tat.wireType === 0) t.isApproval = Boolean(ra.varint());
         else ra.skip(tat.wireType);
       }
