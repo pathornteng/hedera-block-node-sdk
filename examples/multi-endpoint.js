@@ -10,10 +10,10 @@
 const { BlockNodeClient } = require("../dist/client");
 
 const TESTNET_ENDPOINTS = [
-  "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840",
-  "s01.test.blk.sgp.lat.ope.eng.hashgraph.io:40840",
-  "s01.test.blk.chi.lat.ope.eng.hashgraph.io:40840",
-  "lfh01.testnet.blocknode.hashgraph-devops.com:40840",
+  "s01.test.blk.ams.lat.ope.eng.hashgraph.io",
+  "s01.test.blk.sgp.lat.ope.eng.hashgraph.io",
+  "s01.test.blk.chi.lat.ope.eng.hashgraph.io",
+  "lfh01.testnet.blocknode.hashgraph-devops.com",
 ];
 
 /**

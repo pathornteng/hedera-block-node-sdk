@@ -4,17 +4,28 @@ import * as os from "os";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 
+// Fixed per-service ports on the block node host.
+const SUBSCRIBER_PORT = 40980;   // gRPC — block subscribers
+const BLOCK_ACCESS_PORT = 40981; // gRPC/HTTP — block query API
+const SERVER_STATUS_PORT = 40982; // gRPC (HTTP endpoint not yet implemented by this SDK)
+
 /**
  * Manages inline proto definitions and loaded gRPC clients.
  * Protos are written to a temp directory at construction and cleaned up on close().
  */
 export class ProtoManager {
   private protoDir: string;
+  private readonly serverStatusEndpoint: string;
+  private readonly blockAccessEndpoint: string;
+  private readonly subscriberEndpoint: string;
   private _nodeClient: grpc.Client | null = null;
   private _blockClient: grpc.Client | null = null;
   private _streamClient: grpc.Client | null = null;
 
   constructor(private readonly endpoint: string, private readonly tls: "tls" | "insecure") {
+    this.serverStatusEndpoint = `${endpoint}:${SERVER_STATUS_PORT}`;
+    this.blockAccessEndpoint = `${endpoint}:${BLOCK_ACCESS_PORT}`;
+    this.subscriberEndpoint = `${endpoint}:${SUBSCRIBER_PORT}`;
     this.protoDir = fs.mkdtempSync(path.join(os.tmpdir(), "bnproto-"));
     this.writeProtos();
     this.loadClients();
@@ -176,8 +187,8 @@ service BlockStreamSubscribeService {
     const blockPkg  = (grpc.loadPackageDefinition(blockDef)  as any)["org"]["hiero"]["block"]["api"];
     const streamPkg = (grpc.loadPackageDefinition(streamDef) as any)["org"]["hiero"]["block"]["api"];
 
-    this._nodeClient   = new nodePkg.BlockNodeService(this.endpoint, creds);
-    this._blockClient  = new blockPkg.BlockAccessService(this.endpoint, creds);
-    this._streamClient = new streamPkg.BlockStreamSubscribeService(this.endpoint, creds);
+    this._nodeClient   = new nodePkg.BlockNodeService(this.serverStatusEndpoint, creds);
+    this._blockClient  = new blockPkg.BlockAccessService(this.blockAccessEndpoint, creds);
+    this._streamClient = new streamPkg.BlockStreamSubscribeService(this.subscriberEndpoint, creds);
   }
 }

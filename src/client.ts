@@ -41,7 +41,7 @@ const BLOCK_CODE_NAMES: Record<string, string> = {
  * import { BlockNodeClient } from "@ohmpathorn/block-node-client";
  *
  * const client = new BlockNodeClient({
- *   endpoint: "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840",
+ *   endpoint: "s01.test.blk.ams.lat.ope.eng.hashgraph.io",
  * });
  *
  * const status = await client.serverStatus();

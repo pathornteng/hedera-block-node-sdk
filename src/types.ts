@@ -1,7 +1,10 @@
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface BlockNodeClientOptions {
-  /** gRPC endpoint, e.g. "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840" */
+  /**
+   * Block node hostname, without a port, e.g. "s01.test.blk.ams.lat.ope.eng.hashgraph.io".
+   * Ports are fixed per service: subscriber=40980, blockAccess=40981, serverStatus=40982.
+   */
   endpoint: string;
   /**
    * TLS mode.

@@ -413,14 +413,14 @@ function addTable(slide, headers, rows, y = 1.25, colW = null) {
 // SLIDE 12 — Testnet Endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 {
-  const slide = makeSlide("Testnet Endpoints", "Port 40840 — TLS or plaintext (USE_INSECURE=1)");
+  const slide = makeSlide("Testnet Endpoints", "Ports 40980/40981/40982 — TLS or plaintext (USE_INSECURE=1)");
   addTable(slide,
-    ["Region", "Endpoint"],
+    ["Region", "Host"],
     [
-      ["Amsterdam", "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840"],
-      ["Singapore", "s01.test.blk.sgp.lat.ope.eng.hashgraph.io:40840"],
-      ["Chicago",   "s01.test.blk.chi.lat.ope.eng.hashgraph.io:40840"],
-      ["Tier 2",    "lfh01.testnet.blocknode.hashgraph-devops.com:40840"],
+      ["Amsterdam", "s01.test.blk.ams.lat.ope.eng.hashgraph.io"],
+      ["Singapore", "s01.test.blk.sgp.lat.ope.eng.hashgraph.io"],
+      ["Chicago",   "s01.test.blk.chi.lat.ope.eng.hashgraph.io"],
+      ["Tier 2",    "lfh01.testnet.blocknode.hashgraph-devops.com"],
     ],
     1.25,
     [1.6, 7.6],
@@ -432,7 +432,7 @@ function addTable(slide, headers, rows, y = 1.25, colW = null) {
     fill: { color: LIGHT_BG },
   });
 
-  slide.addText("const client = new BlockNodeClient({ endpoint: 's01.test.blk.ams.lat.ope.eng.hashgraph.io:40840' });", {
+  slide.addText("const client = new BlockNodeClient({ endpoint: 's01.test.blk.ams.lat.ope.eng.hashgraph.io' });", {
     x: 0.4, y: 4.55, w: 9.2, h: 0.44,
     fontSize: 11, color: TEXT_DARK, fontFace: "Courier New",
     fill: { color: LIGHT_BG },

@@ -22,7 +22,7 @@ npm install @ohmpathorn/block-node-client
 import { BlockNodeClient } from "@ohmpathorn/block-node-client";
 
 const client = new BlockNodeClient({
-  endpoint: "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840",
+  endpoint: "s01.test.blk.ams.lat.ope.eng.hashgraph.io",
 });
 
 // Check node health
@@ -48,14 +48,14 @@ setTimeout(() => handle.cancel(), 60_000);
 
 ## Testnet endpoints
 
-All endpoints use port **40840**.
+The client connects to fixed ports on each host: **40980** (subscriber, gRPC), **40981** (blockAccess, gRPC/HTTP), **40982** (serverStatus).
 
-| Region | Endpoint |
+| Region | Host |
 |--------|----------|
-| Amsterdam | `s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840` |
-| Singapore | `s01.test.blk.sgp.lat.ope.eng.hashgraph.io:40840` |
-| Chicago | `s01.test.blk.chi.lat.ope.eng.hashgraph.io:40840` |
-| Tier 2 | `lfh01.testnet.blocknode.hashgraph-devops.com:40840` |
+| Amsterdam | `s01.test.blk.ams.lat.ope.eng.hashgraph.io` |
+| Singapore | `s01.test.blk.sgp.lat.ope.eng.hashgraph.io` |
+| Chicago | `s01.test.blk.chi.lat.ope.eng.hashgraph.io` |
+| Tier 2 | `lfh01.testnet.blocknode.hashgraph-devops.com` |
 
 ---
 
@@ -65,7 +65,7 @@ All endpoints use port **40840**.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `endpoint` | `string` | required | `host:port` of the block node |
+| `endpoint` | `string` | required | hostname of the block node (no port) |
 | `tls` | `"tls" \| "insecure"` | `"tls"` | TLS or plaintext |
 | `timeout` | `number` | `10000` | Unary call timeout in ms |
 
@@ -370,7 +370,7 @@ node examples/multi-endpoint.js
 USE_INSECURE=1 node examples/basic.js
 
 # Different endpoint
-ENDPOINT=s01.test.blk.sgp.lat.ope.eng.hashgraph.io:40840 node examples/basic.js
+ENDPOINT=s01.test.blk.sgp.lat.ope.eng.hashgraph.io node examples/basic.js
 ```
 
 ---

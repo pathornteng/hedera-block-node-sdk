@@ -8,13 +8,13 @@
  * Run:
  *   node examples/get-block-transactions.js
  *   BLOCK=38764703 node examples/get-block-transactions.js
- *   ENDPOINT=s01.test.blk.sgp.lat.ope.eng.hashgraph.io:40840 node examples/get-block-transactions.js
+ *   ENDPOINT=s01.test.blk.sgp.lat.ope.eng.hashgraph.io node examples/get-block-transactions.js
  */
 
 const { BlockNodeClient } = require("../dist/client");
 
 const ENDPOINT = process.env.ENDPOINT
-  || "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840";
+  || "s01.test.blk.ams.lat.ope.eng.hashgraph.io";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

@@ -11,7 +11,7 @@
 const { BlockNodeClient } = require("../dist/client");
 
 const ENDPOINT = process.env.ENDPOINT
-  || "s01.test.blk.ams.lat.ope.eng.hashgraph.io:40840";
+  || "s01.test.blk.ams.lat.ope.eng.hashgraph.io";
 
 async function main() {
   const client = new BlockNodeClient({
