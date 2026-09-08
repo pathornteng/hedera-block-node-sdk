@@ -716,12 +716,12 @@ function decodeHederaTransactionRecord(buf: Buffer, out: FullTransaction): void 
     else if (fieldNum === 4 && wireType === 2) { if (!out.transactionId) out.transactionId = decodeTransactionId(r.bytes()); else r.skip(wireType); }
     else if (fieldNum === 5 && wireType === 2) { const m = r.bytes().toString("utf8").trim(); if (m && !out.memo) out.memo = m; }
     else if (fieldNum === 6 && wireType === 0) out.transactionFee = r.varint();
-    else if (fieldNum === 7 && wireType === 2) out.transfers = decodeTransferList(r.bytes());
-    else if (fieldNum === 10 && wireType === 2) out.tokenTransfers.push(decodeTokenTransferList(r.bytes()));
-    else if (fieldNum === 12 && wireType === 2) out.assessedCustomFees.push(decodeAssessedCustomFee(r.bytes()));
+    else if (fieldNum === 10 && wireType === 2) out.transfers = decodeTransferList(r.bytes());
+    else if (fieldNum === 11 && wireType === 2) out.tokenTransfers.push(decodeTokenTransferList(r.bytes()));
+    else if (fieldNum === 13 && wireType === 2) out.assessedCustomFees.push(decodeAssessedCustomFee(r.bytes()));
     else if (fieldNum === 16 && wireType === 2) out.alias = r.bytes();
     else if (fieldNum === 17 && wireType === 2) out.ethereumHash = r.bytes();
-    else if (fieldNum === 22 && wireType === 2) out.evmAddress = r.bytes();
+    else if (fieldNum === 21 && wireType === 2) out.evmAddress = r.bytes();
     else r.skip(wireType);
   }
 }
