@@ -147,10 +147,10 @@ export const TX_TYPES: Record<number, string> = {
   7:  "CONTRACT_CALL",
   8:  "CONTRACT_CREATE",
   9:  "CONTRACT_UPDATE",
-  10: "CONTRACT_DELETE",
-  11: "CRYPTO_ADD_LIVE_HASH",
-  12: "CRYPTO_CREATE",
-  13: "CRYPTO_DELETE",
+  10: "CRYPTO_ADD_LIVE_HASH",
+  11: "CRYPTO_CREATE",
+  12: "CRYPTO_DELETE",
+  13: "CRYPTO_DELETE_LIVE_HASH",
   14: "CRYPTO_TRANSFER",
   15: "CRYPTO_UPDATE",
   16: "FILE_APPEND",
@@ -159,6 +159,7 @@ export const TX_TYPES: Record<number, string> = {
   19: "FILE_UPDATE",
   20: "SYSTEM_DELETE",
   21: "SYSTEM_UNDELETE",
+  22: "CONTRACT_DELETE",
   23: "FREEZE",
   24: "CONSENSUS_CREATE_TOPIC",
   25: "CONSENSUS_UPDATE_TOPIC",
@@ -196,7 +197,15 @@ export const TX_TYPES: Record<number, string> = {
   58: "TOKEN_AIRDROP",
   59: "TOKEN_CANCEL_AIRDROP",
   60: "TOKEN_CLAIM_AIRDROP",
-  61: "BATCH",
+  65: "STATE_SIGNATURE_TRANSACTION",
+  66: "HINTS_PREPROCESSING_VOTE",
+  67: "HINTS_KEY_PUBLICATION",
+  68: "HINTS_PARTIAL_SIGNATURE",
+  69: "HISTORY_PROOF_SIGNATURE",
+  70: "HISTORY_PROOF_KEY_PUBLICATION",
+  71: "HISTORY_PROOF_VOTE",
+  72: "CRS_PUBLICATION",
+  74: "ATOMIC_BATCH",
 };
 
 // Transaction.field5 → SignedTransaction.field1 → TransactionBody
@@ -734,18 +743,26 @@ function decodeHederaTransactionRecord(buf: Buffer, out: FullTransaction): void 
   }
 }
 
-// Decodes Transaction bytes (body + signatures) into the provided FullTransaction
+// Decodes Transaction bytes (body + signatures) into the provided FullTransaction.
+//
+// The outer Transaction message's field numbers are, in order: 1 = body
+// (direct TransactionBody, deprecated), 2 = sigs (SignatureList, deprecated),
+// 3 = sigMap (SignatureMap, deprecated), 4 = bodyBytes (deprecated),
+// 5 = signedTransactionBytes (the modern, required field). Some real traffic
+// still uses the deprecated 3+4 pair instead of 5.
 function decodeTransactionIntoFull(txBytes: Buffer, out: FullTransaction): void {
   let signedTxBytes: Buffer | null = null;
+  let directBodyBytes: Buffer | null = null;
   let legacyBodyBytes: Buffer | null = null;
   let legacySigMapBytes: Buffer | null = null;
 
   const r0 = new ProtoReader(txBytes);
   while (r0.more()) {
     const { fieldNum, wireType } = r0.tag();
-    if (fieldNum === 5 && wireType === 2) signedTxBytes    = r0.bytes();
-    else if (fieldNum === 3 && wireType === 2) legacyBodyBytes  = r0.bytes();
-    else if (fieldNum === 2 && wireType === 2) legacySigMapBytes = r0.bytes();
+    if (fieldNum === 1 && wireType === 2) directBodyBytes   = r0.bytes();
+    else if (fieldNum === 3 && wireType === 2) legacySigMapBytes = r0.bytes();
+    else if (fieldNum === 4 && wireType === 2) legacyBodyBytes  = r0.bytes();
+    else if (fieldNum === 5 && wireType === 2) signedTxBytes    = r0.bytes();
     else r0.skip(wireType);
   }
 
@@ -762,6 +779,13 @@ function decodeTransactionIntoFull(txBytes: Buffer, out: FullTransaction): void 
   } else if (legacyBodyBytes) {
     bodyBytes = legacyBodyBytes;
     if (legacySigMapBytes) out.signatures = decodeSignatureMap(legacySigMapBytes);
+  } else if (directBodyBytes) {
+    bodyBytes = directBodyBytes;
+    // field 2 (sigs / SignatureList) is the oldest, pre-SignatureMap format —
+    // a flat list of raw signature bytes with no paired public key prefix.
+    // Different enough shape, and rare enough in practice, that it's left
+    // undecoded rather than force-fit into the SignaturePair-shaped
+    // `signatures[]` output.
   }
 
   if (signedTxBytes) out.signedTransactionBytes = signedTxBytes;
