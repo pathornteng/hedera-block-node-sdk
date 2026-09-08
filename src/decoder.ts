@@ -764,6 +764,9 @@ function decodeTransactionIntoFull(txBytes: Buffer, out: FullTransaction): void 
     if (legacySigMapBytes) out.signatures = decodeSignatureMap(legacySigMapBytes);
   }
 
+  if (signedTxBytes) out.signedTransactionBytes = signedTxBytes;
+  if (bodyBytes) out.bodyBytes = bodyBytes;
+
   if (!bodyBytes) return;
 
   const r2 = new ProtoReader(bodyBytes);

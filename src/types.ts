@@ -361,4 +361,19 @@ export interface FullTransaction {
   rawTransaction: Buffer;
   /** Raw serialised TransactionRecord proto bytes (record_file blocks only) */
   rawRecord?: Buffer;
+  /**
+   * Raw serialised TransactionBody proto bytes — the exact message that
+   * `signatures[]` sign for Ed25519, and whose keccak256 hash `signatures[]`
+   * sign for ECDSA secp256k1. Present whenever the transaction body could be
+   * decoded at all.
+   */
+  bodyBytes?: Buffer;
+  /**
+   * Raw serialised SignedTransaction proto bytes (bodyBytes + sigMap
+   * together) — SHA-384 of this is what `TransactionRecord.transactionHash`
+   * contains. Only present when the transaction used the modern
+   * `signedTransactionBytes` wire format (i.e. not legacy transactions
+   * using the deprecated top-level bodyBytes/sigMap fields directly).
+   */
+  signedTransactionBytes?: Buffer;
 }
